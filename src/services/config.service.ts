@@ -1,21 +1,22 @@
-import { AuthenticationService, AzureAuthenticationContext, AzureSubscriptionInfo } from './auth.service.js';
-import { AzureCliService } from './azure-cli.service.js';
+import { AuthenticationService, AzureAuthenticationContext, AzureSubscriptionInfo } from "./auth.service.js";
+import { AzureCliService } from "./azure-cli.service.js";
 
 export class ConfigService {
   private authService: AuthenticationService;
+  private azureCliService: AzureCliService;
 
   constructor(azureCliService?: AzureCliService, authService?: AuthenticationService) {
     // allow injection in tests
     if (authService) {
       this.authService = authService;
+      this.azureCliService = azureCliService || new AzureCliService();
     } else if (azureCliService) {
+      this.azureCliService = azureCliService;
       this.authService = new AuthenticationService(azureCliService);
     } else {
       // If nothing provided, create using default AzureCliService
-      // Lazy require to avoid side effects in tests
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { AzureCliService } = require('./azure-cli.service.js');
-      this.authService = new AuthenticationService(new AzureCliService());
+      this.azureCliService = new AzureCliService();
+      this.authService = new AuthenticationService(this.azureCliService);
     }
   }
 
@@ -33,5 +34,35 @@ export class ConfigService {
 
   clearCache(): void {
     this.authService.clearCache();
+  }
+
+  /**
+   * Get the Azure DevOps organization URL from CLI config
+   */
+  async getOrganizationUrl(): Promise<string | undefined> {
+    try {
+      const result = await this.azureCliService.executeAzCommand<{ defaults?: { organization?: string } }>(
+        "az devops configure --list --output json",
+      );
+      return result?.defaults?.organization;
+    } catch {
+      // Try environment variable as fallback
+      return process.env.AZURE_DEVOPS_ORG_URL;
+    }
+  }
+
+  /**
+   * Get the default project from CLI config
+   */
+  async getDefaultProject(): Promise<string | undefined> {
+    try {
+      const result = await this.azureCliService.executeAzCommand<{ defaults?: { project?: string } }>(
+        "az devops configure --list --output json",
+      );
+      return result?.defaults?.project;
+    } catch {
+      // Try environment variable as fallback
+      return process.env.AZURE_DEVOPS_PROJECT;
+    }
   }
 }
