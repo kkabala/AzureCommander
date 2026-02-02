@@ -1,38 +1,44 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from "child_process";
+import { promisify } from "util";
 
 export class AzureCliNotInstalledError extends Error {
   constructor() {
-    super('Azure CLI is not installed. Install from: https://aka.ms/install-azure-cli');
-    this.name = 'AzureCliNotInstalledError';
+    super("Azure CLI is not installed. Install from: https://aka.ms/install-azure-cli");
+    this.name = "AzureCliNotInstalledError";
   }
 }
 
 export class AzureCliNotAuthenticatedError extends Error {
   constructor() {
-    super('Not authenticated with Azure CLI. Run: az login');
-    this.name = 'AzureCliNotAuthenticatedError';
+    super("Not authenticated with Azure CLI. Run: az login");
+    this.name = "AzureCliNotAuthenticatedError";
   }
 }
 
 export class AzureDevOpsExtensionNotInstalledError extends Error {
   constructor() {
-    super('Azure DevOps extension not installed. Run: az extension add --name azure-devops');
-    this.name = 'AzureDevOpsExtensionNotInstalledError';
+    super("Azure DevOps extension not installed. Run: az extension add --name azure-devops");
+    this.name = "AzureDevOpsExtensionNotInstalledError";
   }
 }
 
 export class AzureDevOpsNotConfiguredError extends Error {
   constructor() {
-    super('Azure DevOps organization not configured. Run: az devops configure --defaults organization=https://dev.azure.com/YOUR_ORG');
-    this.name = 'AzureDevOpsNotConfiguredError';
+    super(
+      "Azure DevOps organization not configured. Run: az devops configure --defaults organization=https://dev.azure.com/YOUR_ORG",
+    );
+    this.name = "AzureDevOpsNotConfiguredError";
   }
 }
 
 export class AzureCliExecutionError extends Error {
-  constructor(message: string, public readonly stderr: string, public readonly exitCode?: number) {
+  constructor(
+    message: string,
+    public readonly stderr: string,
+    public readonly exitCode?: number,
+  ) {
     super(message);
-    this.name = 'AzureCliExecutionError';
+    this.name = "AzureCliExecutionError";
   }
 }
 
@@ -41,7 +47,7 @@ export class AzureCliService {
 
   async isInstalled(): Promise<boolean> {
     try {
-      await this.execAsync('az --version');
+      await this.execAsync("az --version");
       return true;
     } catch {
       return false;
@@ -50,7 +56,7 @@ export class AzureCliService {
 
   async hasDevOpsExtension(): Promise<boolean> {
     try {
-      const { stdout } = await this.execAsync('az extension list --output json');
+      const { stdout } = await this.execAsync("az extension list --output json");
       const extensions = JSON.parse(stdout);
       return this.extensionsIncludeAzureDevOps(extensions);
     } catch {
@@ -60,10 +66,24 @@ export class AzureCliService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      await this.execAsync('az account show');
+      await this.execAsync("az account show");
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Execute a command and return raw stdout (no JSON parsing)
+   */
+  async executeRawCommand(command: string): Promise<string> {
+    await this.validateAzureCliIsInstalled();
+
+    try {
+      const { stdout } = await this.execAsync(command);
+      return stdout;
+    } catch (error: any) {
+      throw new AzureCliExecutionError(`Command failed: ${command}`, error.stderr || "", error.code);
     }
   }
 
@@ -80,8 +100,8 @@ export class AzureCliService {
       return this.parseJsonResponse<T>(stdout);
     } catch (error: any) {
       // If Azure CLI failed because it couldn't resolve @me, attempt to replace @me
-      const stderr: string = (error.stderr || error.message || '').toString();
-      if (stderr.includes('Could not resolve identity: @me')) {
+      const stderr: string = (error.stderr || error.message || "").toString();
+      if (stderr.includes("Could not resolve identity: @me")) {
         // ensure we have a configured username and retry
         const username = await this.ensureConfiguredUsername();
         const newCommand = command.replace(/@me/g, username);
@@ -102,7 +122,7 @@ export class AzureCliService {
   async getAzureDevOpsAccessToken(): Promise<string> {
     try {
       const { stdout } = await this.execAsync(
-        'az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken --output tsv'
+        "az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798 --query accessToken --output tsv",
       );
       return stdout.trim();
     } catch (error: any) {
@@ -111,7 +131,7 @@ export class AzureCliService {
   }
 
   private extensionsIncludeAzureDevOps(extensions: any[]): boolean {
-    return extensions.some((ext: any) => ext.name === 'azure-devops');
+    return extensions.some((ext: any) => ext.name === "azure-devops");
   }
 
   private async validateAzureCliIsInstalled(): Promise<void> {
@@ -135,20 +155,20 @@ export class AzureCliService {
   }
 
   private isDevOpsCommand(command: string): boolean {
-    return command.includes('az repos') || command.includes('az devops');
+    return command.includes("az repos") || command.includes("az devops");
   }
 
   private async ensureConfiguredUsername(): Promise<string> {
     // Check for config file in home directory
     try {
-      const os = await import('os');
-      const path = await import('path');
-      const fs = await import('fs');
+      const os = await import("os");
+      const path = await import("path");
+      const fs = await import("fs");
       const homedir = os.homedir();
-      const cfgPath = path.join(homedir, '.azc', 'config.json');
+      const cfgPath = path.join(homedir, ".azc", "config.json");
 
       if (fs.existsSync(cfgPath)) {
-        const content = fs.readFileSync(cfgPath, 'utf8');
+        const content = fs.readFileSync(cfgPath, "utf8");
         const cfg = JSON.parse(content);
         if (cfg && cfg.username) {
           return cfg.username;
@@ -156,27 +176,27 @@ export class AzureCliService {
       }
 
       // Otherwise prompt the user
-      const readline = await import('readline');
+      const readline = await import("readline");
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
       const question = (q: string) => new Promise<string>((resolve) => rl.question(q, resolve));
 
-      const answer = (await question('Enter your Azure DevOps username/email (used instead of @me): ')).trim();
+      const answer = (await question("Enter your Azure DevOps username/email (used instead of @me): ")).trim();
       rl.close();
 
       // Create config dir and save
-      const cfgDir = path.join(homedir, '.azc');
+      const cfgDir = path.join(homedir, ".azc");
       if (!fs.existsSync(cfgDir)) {
         fs.mkdirSync(cfgDir, { recursive: true });
       }
 
-      const cfgPathNew = path.join(cfgDir, 'config.json');
+      const cfgPathNew = path.join(cfgDir, "config.json");
       fs.writeFileSync(cfgPathNew, JSON.stringify({ username: answer }, null, 2), { mode: 0o600 });
 
       return answer;
     } catch (e) {
       // As a last resort, fall back to literal '@me' so the original error is preserved
-      return '@me';
+      return "@me";
     }
   }
 
@@ -190,16 +210,16 @@ export class AzureCliService {
     }
 
     if (this.isResourceNotFoundError(stderr)) {
-      throw new AzureCliExecutionError('Resource not found', stderr);
+      throw new AzureCliExecutionError("Resource not found", stderr);
     }
   }
 
   private isOrganizationNotConfiguredError(stderr: string): boolean {
-    return stderr.includes('organization') && stderr.includes('not configured');
+    return stderr.includes("organization") && stderr.includes("not configured");
   }
 
   private isResourceNotFoundError(stderr: string): boolean {
-    return stderr.includes('not found') || stderr.includes('does not exist');
+    return stderr.includes("not found") || stderr.includes("does not exist");
   }
 
   private parseJsonResponse<T>(stdout: string): T {
@@ -215,13 +235,9 @@ export class AzureCliService {
       throw error;
     }
 
-    const stderr = error.stderr || error.message || 'Unknown error';
+    const stderr = error.stderr || error.message || "Unknown error";
     const exitCode = error.code;
-    throw new AzureCliExecutionError(
-      `Azure CLI command failed: ${error.message}`,
-      stderr,
-      exitCode
-    );
+    throw new AzureCliExecutionError(`Azure CLI command failed: ${error.message}`, stderr, exitCode);
   }
 
   private isKnownError(error: any): boolean {
@@ -243,9 +259,6 @@ export class AzureCliService {
       throw new AzureCliNotAuthenticatedError();
     }
 
-    throw new AzureCliExecutionError(
-      'Failed to get access token',
-      error.stderr || error.message
-    );
+    throw new AzureCliExecutionError("Failed to get access token", error.stderr || error.message);
   }
 }

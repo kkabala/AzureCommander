@@ -113,8 +113,12 @@ function displayTableOutput(sortedPRs: PullRequest[]): void {
 }
 
 function displayPullRequest(pr: PullRequest): void {
+  const sourceBranch = pr.sourceRefName.replace("refs/heads/", "");
+  const targetBranch = pr.targetRefName.replace("refs/heads/", "");
+
   console.log(`#${pr.pullRequestId} - ${pr.title}`);
   console.log(`  Status: ${pr.status} | Created: ${pr.creationDate}`);
+  console.log(`  Branch: ${sourceBranch} → ${targetBranch}`);
   console.log(`  Repo: ${pr.repository.name}\n`);
 }
 

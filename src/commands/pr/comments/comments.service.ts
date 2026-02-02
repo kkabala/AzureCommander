@@ -108,6 +108,6 @@ export class CommentsService {
   }
 
   private buildThreadsApiPath(repositoryId: string, prId: number): string {
-    return `/_apis/git/repositories/${repositoryId}/pullRequests/${prId}/threads?api-version=7.0`;
+    return `git/repositories/${repositoryId}/pullRequests/${prId}/threads?api-version=7.0`;
   }
 }

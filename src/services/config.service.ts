@@ -37,14 +37,30 @@ export class ConfigService {
   }
 
   /**
+   * Parse INI-style output from az devops configure --list
+   */
+  private parseDevOpsConfig(output: string): Record<string, string> {
+    const config: Record<string, string> = {};
+    const lines = output.split("\n");
+
+    for (const line of lines) {
+      const match = line.match(/^(\w+)\s*=\s*(.+)$/);
+      if (match) {
+        config[match[1].toLowerCase()] = match[2].trim();
+      }
+    }
+
+    return config;
+  }
+
+  /**
    * Get the Azure DevOps organization URL from CLI config
    */
   async getOrganizationUrl(): Promise<string | undefined> {
     try {
-      const result = await this.azureCliService.executeAzCommand<{ defaults?: { organization?: string } }>(
-        "az devops configure --list --output json",
-      );
-      return result?.defaults?.organization;
+      const output = await this.azureCliService.executeRawCommand("az devops configure --list");
+      const config = this.parseDevOpsConfig(output);
+      return config["organization"] || process.env.AZURE_DEVOPS_ORG_URL;
     } catch {
       // Try environment variable as fallback
       return process.env.AZURE_DEVOPS_ORG_URL;
@@ -56,10 +72,9 @@ export class ConfigService {
    */
   async getDefaultProject(): Promise<string | undefined> {
     try {
-      const result = await this.azureCliService.executeAzCommand<{ defaults?: { project?: string } }>(
-        "az devops configure --list --output json",
-      );
-      return result?.defaults?.project;
+      const output = await this.azureCliService.executeRawCommand("az devops configure --list");
+      const config = this.parseDevOpsConfig(output);
+      return config["project"] || process.env.AZURE_DEVOPS_PROJECT;
     } catch {
       // Try environment variable as fallback
       return process.env.AZURE_DEVOPS_PROJECT;

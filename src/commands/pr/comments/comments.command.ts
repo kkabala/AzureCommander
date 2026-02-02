@@ -117,14 +117,40 @@ function displayTableOutput(threads: CommentThread[], prId: number): void {
     console.log(`\nFound ${threads.length} comment thread(s) for PR #${prId}:\n`);
 
     threads.forEach((thread, index) => {
-      console.log(`Thread #${index + 1} (Status: ${thread.status})`);
+      console.log(`${"─".repeat(60)}`);
+      console.log(`Thread #${index + 1} (Status: ${thread.status || "unknown"})`);
       console.log(`  Published: ${thread.publishedDate}`);
 
       if (thread.threadContext?.filePath) {
-        console.log(`  File: ${thread.threadContext.filePath}`);
+        const lineInfo = thread.threadContext.rightFileStart ? `:${thread.threadContext.rightFileStart.line}` : "";
+        console.log(`  File: ${thread.threadContext.filePath}${lineInfo}`);
       }
 
-      console.log(`  Comments: ${thread.comments.length}\n`);
+      console.log("");
+
+      // Display each comment in the thread
+      thread.comments.forEach((comment, commentIndex) => {
+        if (comment.isDeleted) return;
+
+        const author = comment.author?.displayName || "Unknown";
+        const date = new Date(comment.publishedDate).toLocaleString();
+
+        if (commentIndex === 0) {
+          console.log(`  💬 ${author} (${date}):`);
+        } else {
+          console.log(`  ↳ ${author} (${date}):`);
+        }
+
+        // Display comment content, handling multiline
+        const content = comment.content || "(no content)";
+        const lines = content.split("\n");
+        lines.forEach((line) => {
+          console.log(`     ${line}`);
+        });
+        console.log("");
+      });
     });
+
+    console.log(`${"─".repeat(60)}`);
   }
 }
