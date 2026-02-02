@@ -79,6 +79,22 @@ export class AzureCliService {
 
       return this.parseJsonResponse<T>(stdout);
     } catch (error: any) {
+      // If Azure CLI failed because it couldn't resolve @me, attempt to replace @me
+      const stderr: string = (error.stderr || error.message || '').toString();
+      if (stderr.includes('Could not resolve identity: @me')) {
+        // ensure we have a configured username and retry
+        const username = await this.ensureConfiguredUsername();
+        const newCommand = command.replace(/@me/g, username);
+        try {
+          const { stdout: stdout2, stderr: stderr2 } = await this.execAsync(newCommand);
+          this.handleStderrErrors(stderr2);
+          return this.parseJsonResponse<T>(stdout2);
+        } catch (err2: any) {
+          // fall through to generic handler
+          return this.handleExecutionError(err2);
+        }
+      }
+
       return this.handleExecutionError(error);
     }
   }
@@ -120,6 +136,48 @@ export class AzureCliService {
 
   private isDevOpsCommand(command: string): boolean {
     return command.includes('az repos') || command.includes('az devops');
+  }
+
+  private async ensureConfiguredUsername(): Promise<string> {
+    // Check for config file in home directory
+    try {
+      const os = await import('os');
+      const path = await import('path');
+      const fs = await import('fs');
+      const homedir = os.homedir();
+      const cfgPath = path.join(homedir, '.azc', 'config.json');
+
+      if (fs.existsSync(cfgPath)) {
+        const content = fs.readFileSync(cfgPath, 'utf8');
+        const cfg = JSON.parse(content);
+        if (cfg && cfg.username) {
+          return cfg.username;
+        }
+      }
+
+      // Otherwise prompt the user
+      const readline = await import('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+      const question = (q: string) => new Promise<string>((resolve) => rl.question(q, resolve));
+
+      const answer = (await question('Enter your Azure DevOps username/email (used instead of @me): ')).trim();
+      rl.close();
+
+      // Create config dir and save
+      const cfgDir = path.join(homedir, '.azc');
+      if (!fs.existsSync(cfgDir)) {
+        fs.mkdirSync(cfgDir, { recursive: true });
+      }
+
+      const cfgPathNew = path.join(cfgDir, 'config.json');
+      fs.writeFileSync(cfgPathNew, JSON.stringify({ username: answer }, null, 2), { mode: 0o600 });
+
+      return answer;
+    } catch (e) {
+      // As a last resort, fall back to literal '@me' so the original error is preserved
+      return '@me';
+    }
   }
 
   private handleStderrErrors(stderr: string): void {
